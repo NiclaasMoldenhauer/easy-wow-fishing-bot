@@ -65,3 +65,6 @@ If the bot fails to detect the bobber:
   
 ## Disclaimer
 This bot is intended for educational purposes. Use at your own risk, and be mindful of the game's terms of service.
+
+## Collaboration
+If you want to collaborate or have feedback, feel free to get in touch with me. 

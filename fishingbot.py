@@ -1,11 +1,13 @@
+import PySimpleGUI as sg
 import pyautogui
 import time
 import random
 from pynput.mouse import Button, Controller
-import os
 import numpy as np
 from PIL import Image
 from collections import deque
+import sys
+import os
 
 def find_file(filename, search_path):
     for root, dirs, files in os.walk(search_path):
@@ -17,15 +19,19 @@ def find_file(filename, search_path):
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)  # Go one level up
 
-# Try to find bait.png
-BAIT_IMAGE = find_file("bait.png", project_root)
-if BAIT_IMAGE is None:
-    raise FileNotFoundError(f"Could not find bait.png in or above {script_dir}")
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+BAIT_IMAGE = resource_path("bait.png")
+print(f"Attempting to load bait image from: {BAIT_IMAGE}")
 
 FISHING_BUTTON = "mouse5"  # Represents the 5th mouse button
 INTERACT_BUTTON = Button.x1  # Represents the 4th mouse button for interaction
 TUNE_BAIT_MOUSE_UNDER_PX = 35
-# EDGE_RESET = 10, 10
 ACTIVE_AFTER = 3
 CONFIDENCE = 0.5
 MAX_CAST_ATTEMPTS = 3  # Maximum number of casting attempts before resetting
@@ -78,12 +84,6 @@ def click_fishing_button():
     else:
         pyautogui.press(FISHING_BUTTON)
 
-def click_interact_button():
-    print("Clicking interact button (Mouse4)")
-    mouse.press(INTERACT_BUTTON)
-    time.sleep(0.1)  # Short delay to ensure the click registers
-    mouse.release(INTERACT_BUTTON)
-
 def get_bobber_region(bobber_pos):
     x, y = bobber_pos
     width, height = BOBBER_REGION_SIZE
@@ -107,8 +107,6 @@ def detect_fish_bite(movement_history, last_large_movement_time):
     current_movement = movement_history[-1]
     current_time = time.time()
     
-    # print(f"Current movement: {current_movement:.2f}, Threshold: {threshold:.2f}, Sustained Threshold: {sustained_threshold:.2f}")
-    
     # Check for sudden large movement
     if current_movement > threshold:
         if current_time - last_large_movement_time > COOLDOWN_PERIOD:
@@ -125,83 +123,99 @@ def detect_fish_bite(movement_history, last_large_movement_time):
     
     return False, last_large_movement_time
 
-print(f"Script directory: {script_dir}")
-print(f"Project root directory: {project_root}")
-print(f"Looking for bait image at: {BAIT_IMAGE}")
-print(f"Current working directory: {os.getcwd()}")
-print("Files in the current directory:")
-for file in os.listdir():
-    print(f" - {file}")
+def main():
+    layout = [
+        [sg.Text("WoW Fishing Bot by Rejoove", font=('Helvetica', 16))],
+        [sg.Text("Status: "), sg.Text("Idle", key="-STATUS-")],
+        [sg.Button("Start"), sg.Button("Stop"), sg.Button("Exit")]
+    ]
 
-time.sleep(ACTIVE_AFTER)
+    window = sg.Window("WoW Fishing Bot by Rejoove", layout)
 
-while True:
-    print("\n--- Starting new fishing cycle ---")
-    time.sleep(0.25 + random.uniform(0, 1.5))
-
-    # 10% Chance to press "space"
-    chance = random.randint(0, 100)
-    if chance <= 10:
-        print("Pressing space")
-        pyautogui.press("space")
-        time.sleep(2)
-
+    fishing_active = False
+    state = "IDLE"
+    start_time = 0
     cast_attempts = 0
-    bobber_found = False
-
-    while cast_attempts < MAX_CAST_ATTEMPTS and not bobber_found:
-        click_fishing_button()
-        cast_attempts += 1
-        print(f"Cast attempt {cast_attempts}")
-
-        # Resetting the mouse's pos
-        # pyautogui.moveTo(*EDGE_RESET)
-        # print(f"Reset mouse position to {EDGE_RESET}")
-        
-        time.sleep(3)  # Wait for the bobber to appear
-        
-        bobber = find_on_screen(BAIT_IMAGE)
-        if bobber is not None:
-            bobber_found = True
-            break
-        
-        print("Couldn't find the bobber. Trying again.")
-        time.sleep(1)  # Short delay before next attempt
-
-    if not bobber_found:
-        print("Failed to find bobber after maximum attempts. Restarting cycle.")
-        continue
-
-    fishing = True
+    bobber = None
     movement_history = deque(maxlen=HISTORY_SIZE)
     last_large_movement_time = 0
+    initial_image = None
     
-    bobber_region = get_bobber_region(bobber)
-    pyautogui.moveTo(bobber.x, bobber.y + TUNE_BAIT_MOUSE_UNDER_PX)
-    print(f"Moved mouse to bobber position: ({bobber.x}, {bobber.y + TUNE_BAIT_MOUSE_UNDER_PX})")
-    
-    initial_image = pyautogui.screenshot(region=bobber_region)
-    start_time = time.time()
-    
-    while fishing and time.time() - start_time < 23:  # Wait up to 23 seconds for a bite
-        time.sleep(DETECTION_INTERVAL)
-        current_image = pyautogui.screenshot(region=bobber_region)
+    while True:
+        event, values = window.read(timeout=100)  # Reduced timeout for more responsiveness
         
-        movement = calculate_movement(initial_image, current_image)
-        movement_history.append(movement)
-        
-        fish_bite, last_large_movement_time = detect_fish_bite(movement_history, last_large_movement_time)
-        if fish_bite:
-            click_interact_button()
-            print("Waiting 2 seconds before next cast")
-            time.sleep(2)  # Wait for 2 seconds before casting again
-            fishing = False
+        if event == sg.WINDOW_CLOSED or event == "Exit":
             break
-        
-        initial_image = current_image  # Update the reference image
-    
-    if fishing:
-        print("No fish caught within 30 seconds. Restarting cycle.")
+        elif event == "Start" and state == "IDLE":
+            fishing_active = True
+            state = "START_FISHING"
+            window["-STATUS-"].update("Starting fishing")
+        elif event == "Stop":
+            fishing_active = False
+            state = "IDLE"
+            window["-STATUS-"].update("Stopped")
 
-    print("Waiting 1 second before next cast")
-    time.sleep(1)  # Short delay before next cast
+        if fishing_active:
+            if state == "START_FISHING":
+                window["-STATUS-"].update("Starting new fishing cycle")
+                time.sleep(0.25 + random.uniform(0, 1.5))
+                
+                # 10% Chance to press "space"
+                if random.randint(0, 100) <= 10:
+                    window["-STATUS-"].update("Pressing space")
+                    pyautogui.press("space")
+                    time.sleep(2)
+                
+                state = "CAST_LINE"
+                cast_attempts = 0
+                
+            elif state == "CAST_LINE":
+                if cast_attempts < MAX_CAST_ATTEMPTS:
+                    window["-STATUS-"].update(f"Cast attempt {cast_attempts + 1}")
+                    click_fishing_button()
+                    cast_attempts += 1
+                    state = "FIND_BOBBER"
+                    start_time = time.time()
+                else:
+                    window["-STATUS-"].update("Failed to find bobber. Restarting cycle.")
+                    state = "START_FISHING"
+                
+            elif state == "FIND_BOBBER":
+                if time.time() - start_time > 3:  # Wait up to 3 seconds for bobber
+                    bobber = find_on_screen(BAIT_IMAGE)
+                    if bobber:
+                        window["-STATUS-"].update(f"Found bobber at {bobber}")
+                        pyautogui.moveTo(bobber.x, bobber.y + TUNE_BAIT_MOUSE_UNDER_PX)
+                        state = "WATCH_BOBBER"
+                        start_time = time.time()
+                        movement_history.clear()
+                        bobber_region = get_bobber_region(bobber)
+                        initial_image = pyautogui.screenshot(region=bobber_region)
+                    else:
+                        state = "CAST_LINE"
+                
+            elif state == "WATCH_BOBBER":
+                if time.time() - start_time < 23:  # Watch for up to 23 seconds
+                    current_image = pyautogui.screenshot(region=bobber_region)
+                    movement = calculate_movement(initial_image, current_image)
+                    movement_history.append(movement)
+                    
+                    fish_bite, last_large_movement_time = detect_fish_bite(movement_history, last_large_movement_time)
+                    if fish_bite:
+                        window["-STATUS-"].update("Fish bite detected!")
+                        click_interact_button()
+                        window["-STATUS-"].update("Waiting 2 seconds before next cast")
+                        time.sleep(2)
+                        state = "START_FISHING"
+                    
+                    initial_image = current_image
+                else:
+                    window["-STATUS-"].update("No fish caught within 23 seconds. Restarting cycle.")
+                    state = "START_FISHING"
+
+        window.refresh()
+
+    window.close()
+
+if __name__ == "__main__":
+    main()

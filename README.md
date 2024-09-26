@@ -20,6 +20,8 @@ This bot automates fishing in World of Warcraft, enabling you to fish without ma
 - Clone the repository
 - Open your terminal and clone the repository:
 
+Alternatively use the fishbot.exe located in the dist folder. Mouse5 Hotkey in WoW for casting your fishing pole, Mouse4 as interactbutton.
+
 ```
 git clone https://github.com/NiclaasMoldenhauer/easy-wow-fishing-bot.git
 ```

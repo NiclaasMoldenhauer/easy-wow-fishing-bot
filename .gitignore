@@ -1,0 +1,22 @@
+# Logs
+logs
+*.log
+*.log.*
+pids
+*.pid
+*.pid.lock
+
+
+# IDEs and Editors
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+venv/
+env/
+pip-log.txt
+pip-delete-this-directory.txt
